@@ -1,0 +1,104 @@
+name: "Bug Report"
+description: Report a bug or unintended behavior in FIRI Unlocker.
+title: "[BUG]: <short description>"
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report! 
+        Please provide as much diagnostic information as possible to help us trace the issue.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: Clear and concise description of what the bug is.
+      placeholder: "e.g., When launching in standard mode, the app freezes at checking registry hooks..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment Type
+      description: Where were you running FIRI Unlocker when this happened?
+      options:
+        - "Classic Windows Desktop (User session)"
+        - "Windows Preinstallation Environment (WinPE)"
+        - "Windows Recovery Environment (WinRE)"
+        - "Safe Mode"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os-version
+    attributes:
+      label: Windows OS Version
+      options:
+        - "Windows 11 (x64)"
+        - "Windows 10 (x64)"
+        - "Windows Server"
+        - "Other / Legacy Windows"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: privileges
+    attributes:
+      label: Execution Privileges
+      description: Did the application execute with full UAC administrative elevation?
+      options:
+        - "Elevated Administrator (Default Manifest ManifestUAC)"
+        - "Standard User (Elevation failed/blocked)"
+        - "SYSTEM Account"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps To Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Run 'firiu.exe'
+        2. Accept the self-signed certificate import prompt
+        3. Select option X...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+      placeholder: "e.g., The scan should complete and output remediation logs."
+    validations:
+      required: true
+
+  - type: input
+    id: binary-sha256
+    attributes:
+      label: Binary SHA256 Checksum
+      description: The SHA256 hash of your firiu.exe file (check the GitHub App release notes to verify authenticity).
+      placeholder: "d442f4c424931ae53918959897d12608fede8f28bf04eb409ef93c331c069d06"
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs-screenshots
+    attributes:
+      label: Debug Logs / Error Messages / Screenshots
+      description: Paste any console outputs, stack traces, crash dumps, or drag-and-drop images here.
+      placeholder: "e.g., [ERROR] [crypt32.lib] failed to parse certificate signature..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: comments
+    attributes:
+      label: Any additional comments
+      description: Add any additional comments if you have any.
+      placeholder: "e.g., please fix this asap"
+    validations:
+      required: false

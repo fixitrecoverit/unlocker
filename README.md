@@ -1,5 +1,7 @@
 # FIRI Unlocker
 
+[Русский](/README_ru.md) • English
+
 **FIRI Unlocker** is a portable Windows remediation utility distributed as a single static executable.
 It combines persistence scanning, process/file inspection and system repair in one tool, runs from
 regular sessions as well as Safe Mode / WinPE / WinRE, and requires no installation.

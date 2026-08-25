@@ -1,0 +1,101 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'release version without the v prefix, e.g. 0.1'
+        required: true
+        type: string
+      changelog:
+        description: 'changelog - who did what'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+
+      - name: setup msvc
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: compile
+        shell: cmd
+        run: |
+          mkdir obj
+          mkdir bin
+          cl /nologo /W4 /EHsc /O2 /MT /D_UNICODE /DUNICODE /Foobj\ /Febin\firiu.exe src\*.cpp /link /SUBSYSTEM:CONSOLE /MANIFEST:EMBED "/MANIFESTUAC:level='requireAdministrator' uiAccess='false'" user32.lib advapi32.lib shell32.lib gdi32.lib cfgmgr32.lib ole32.lib oleaut32.lib uuid.lib wintrust.lib iphlpapi.lib crypt32.lib
+
+      - name: restore signing certificate
+        shell: bash
+        run: |
+          echo "${{ secrets.FIRI_SIGNING_CERT_PFX }}" | base64 -d > "$GITHUB_WORKSPACE/FIRI_Project.pfx"
+
+      - name: sign binary
+        shell: pwsh
+        env:
+          FIRI_CERT_PASSWORD: ${{ secrets.FIRI_SIGNING_CERT_PASSWORD }}
+        run: |
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory |
+            Sort-Object Name -Descending |
+            ForEach-Object { Join-Path $_.FullName "x64\signtool.exe" } |
+            Where-Object { Test-Path $_ } |
+            Select-Object -First 1
+          if (-not $signtool) { throw "signtool not found on runner" }
+          & $signtool sign /fd SHA256 /f "$env:GITHUB_WORKSPACE\FIRI_Project.pfx" /p "$env:FIRI_CERT_PASSWORD" "$env:GITHUB_WORKSPACE\bin\firiu.exe"
+          if ($LASTEXITCODE -ne 0) { throw "signing failed" }
+          Remove-Item "$env:GITHUB_WORKSPACE\FIRI_Project.pfx"
+
+      - name: verify signature
+        shell: pwsh
+        run: |
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory |
+            Sort-Object Name -Descending |
+            ForEach-Object { Join-Path $_.FullName "x64\signtool.exe" } |
+            Where-Object { Test-Path $_ } |
+            Select-Object -First 1
+          & $signtool verify /pa "$env:GITHUB_WORKSPACE\bin\firiu.exe"
+          if ($LASTEXITCODE -ne 0) { throw "signature verification failed" }
+
+      - name: generate checksums
+        shell: bash
+        run: |
+          cd bin
+          sha256sum firiu.exe > firiu.exe.sha256
+          cat firiu.exe.sha256
+
+      - name: firi-project app token
+        id: apptoken
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.FIRI_PROJECT_APP_ID }}
+          private-key: ${{ secrets.FIRI_PROJECT_APP_PRIVATE_KEY }}
+
+      - name: create github release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.apptoken.outputs.token }}
+          VERSION: ${{ inputs.version }}
+          CHANGELOG: ${{ inputs.changelog }}
+        run: |
+          TAG="v${VERSION}"
+          {
+            echo "${CHANGELOG}"
+            echo ""
+            echo "### sha256"
+            echo '```'
+            cat bin/firiu.exe.sha256
+            echo '```'
+          } > release_body.md
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --notes-file release_body.md \
+            bin/firiu.exe \
+            bin/firiu.exe.sha256

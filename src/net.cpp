@@ -15,9 +15,9 @@ std::wstring Ip4(DWORD ip)
            std::to_wstring((ip >> 24) & 0xFF);
 }
 
-unsigned short Port(WORD p)
+unsigned short Port(DWORD p)
 {
-    return (unsigned short)((p >> 8) | (p << 8));
+    return (unsigned short)((p >> 8) | ((p & 0xffu) << 8));
 }
 
 std::wstring Ip6(const BYTE* a)
@@ -26,8 +26,6 @@ std::wstring Ip6(const BYTE* a)
     int o = 0;
     for (int i = 0; i < 16; i += 2)
     {
-        if (i && i % 2 == 0)
-            ;
         int v = (a[i] << 8) | a[i + 1];
         if (v)
             o += swprintf(b + o, 80 - o, L"%x", v);

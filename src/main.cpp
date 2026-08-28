@@ -12,6 +12,7 @@
 #include "net.h"
 #include "cert.h"
 #include "efi.h"
+#include "mbr.h"
 #include "triage.h"
 #include "clip.h"
 #include "watchdog.h"
@@ -225,6 +226,7 @@ static void MainLoop()
         { 'd', L"ads scanner" },
         { 'n', L"network table" },
         { 'f', L"efi partition check" },
+        { 'b', L"mbr/boot signature check" },
         { 'g', L"triage wizard" },
         { 'c', L"clipboard sentry" },
         { '0', L"exit" },
@@ -232,7 +234,7 @@ static void MainLoop()
 
     for (;;)
     {
-        int pick = RunMenu(L"firiu", items, 21);
+        int pick = RunMenu(L"firiu", items, 22);
         if (pick < 0 || items[pick].key == '0')
             return;
 
@@ -297,6 +299,9 @@ static void MainLoop()
         case 'f':
             CmdEfiCheck();
             break;
+        case 'b':
+            CmdMbr(L"");
+            break;
         case 'g':
             CmdTriageWizard();
             break;
@@ -336,6 +341,7 @@ static void Help()
         L"  ads [path]        alternate data stream scan\n"
         L"  net               tcp/udp per-process table\n"
         L"  efi               efi system partition signature check\n"
+        L"  mbr [path]        bootloader/OS pick by file name+size\n"
         L"  triage            review autoruns, store keep/danger verdicts\n"
         L"  triage-check      list currently active flagged items\n"
         L"  triage-reset      clear stored verdicts\n"
@@ -439,6 +445,8 @@ int main()
             CmdNet();
         else if (cmd == L"efi")
             CmdEfiCheck();
+        else if (cmd == L"mbr")
+            CmdMbr(argc >= 3 ? argv[2] : L"");
         else if (cmd == L"triage" || cmd == L"triage-wizard")
             CmdTriageWizard();
         else if (cmd == L"triage-check")

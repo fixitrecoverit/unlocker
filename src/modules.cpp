@@ -926,7 +926,7 @@ bool AddModuleFile(const std::wstring& path)
     }
     LoadModuleImage(m, true);
     g_mods.push_back(m);
-    Out(L"%s[+]%s module '%s' embedded into firiu.exe and loaded\n",
+    Out(L"%s[+]%s module '%s' embedded into FIRI Unlocker and loaded\n",
         col::Grn, col::R, m.name.c_str());
     if (!m.loaded)
         Out(L"%s[!]%s not active: %s\n", col::Red, col::R,

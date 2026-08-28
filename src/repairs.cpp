@@ -27,7 +27,7 @@ void CmdFixHosts()
     }
 
     static const char def[] =
-        "# restored by fixitrecoverit (firi)\r\n"
+        "# restored by fixitrecoverit (FIRI Project)\r\n"
         "127.0.0.1\tlocalhost\r\n"
         "::1\tlocalhost\r\n";
 

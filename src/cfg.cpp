@@ -59,7 +59,7 @@ bool SaveCfg()
         LastErr(L"save settings");
         return false;
     }
-    Out(L"%s[+]%s settings saved into firiu.exe\n", col::Grn, col::R);
+    Out(L"%s[+]%s settings saved into FIRI Unlocker\n", col::Grn, col::R);
     return true;
 }
 

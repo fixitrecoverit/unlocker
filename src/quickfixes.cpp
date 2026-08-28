@@ -287,7 +287,7 @@ void CmdInstallFiriu()
         Out(L"%s[+]%s 'firiu' works in cmd now (%s)\n", col::Grn, col::R,
             link.c_str());
     else
-        Out(L"%s[!]%s couldn't drop into windowsapps (%s) - add firi's folder "
+        Out(L"%s[!]%s couldn't drop into windowsapps (%s) - add FIRI Project's folder "
              "to PATH manually\n",
             col::Yel, col::R, link.empty() ? L"no known folder" : link.c_str());
 

@@ -229,7 +229,7 @@ void CmdTriageWizard()
     for (size_t i = 0; i < verd.size(); i++)
         if (verd[i].v == 1)
             dang++;
-    Out(L"\n%s[+]%s saved %d verdict(s) into firiu.exe (%d dangerous)\n",
+    Out(L"\n%s[+]%s saved %d verdict(s) into FIRI Unlocker (%d dangerous)\n",
         col::Grn, col::R, (int)verd.size(), dang);
 }
 

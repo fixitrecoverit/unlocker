@@ -175,7 +175,7 @@ void CmdSnapSave(const std::wstring& name)
         LastErr(L"saving snapshot");
         return;
     }
-    Out(L"%s[+]%s snapshot '%s' saved (%d lines) into firiu.exe\n",
+    Out(L"%s[+]%s snapshot '%s' saved (%d lines) into FIRI Unlocker\n",
         col::Grn, col::R, name.c_str(), (int)lines.size());
 }
 

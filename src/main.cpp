@@ -105,7 +105,7 @@ static void QuickFixesMenu()
     static const MenuItem items[] = {
         { '1', L"restore fonts" },
         { '2', L"force enable uac" },
-        { '3', L"register firiu (win+r + cmd)" },
+        { '3', L"register FIRI Unlocker (win+r + cmd)" },
         { '4', L"reset hosts file" },
         { '5', L"disable internet proxy" },
         { '0', L"back" },
@@ -156,7 +156,7 @@ static void SettingsMenu()
             g_cfg.mouse ? L"on" : L"off",
             g_cfg.fontcheck ? L"on" : L"off",
             g_cfg.devmode ? L"on" : L"off");
-        int pick = RunMenu(L"settings (saved inside firiu.exe)", items, 6);
+        int pick = RunMenu(L"settings (saved inside FIRI Unlocker)", items, 6);
         if (pick < 0 || items[pick].key == '0')
             break;
         switch (items[pick].key)
@@ -250,7 +250,7 @@ static void MainLoop()
 
     for (;;)
     {
-        int pick = RunMenu(L"firiu", items, 23);
+        int pick = RunMenu(L"FIRI Unlocker", items, 23);
         if (pick < 0 || items[pick].key == '0')
             return;
 
@@ -338,7 +338,7 @@ static void MainLoop()
 
 static void Help()
 {
-    Out(L"usage: firiu [command]\n\n"
+    Out(L"usage: FIRI Unlocker [command]\n\n"
         L"  info              system + hardware summary\n"
         L"  ps                live process view\n"
         L"  kill <pid|name>   terminate\n"
@@ -367,8 +367,8 @@ static void Help()
         L"  triage-reset      clear stored verdicts\n"
         L"  clipsentry        beep on clipboard changes\n"
         L"  modules           module list / add / remove / view\n"
-        L"  module-add <path> embed a .firiumodule into firiu.exe\n"
-        L"  module-remove <id> remove a module from firiu.exe\n"
+        L"  module-add <path> embed a .firiumodule into FIRI Unlocker\n"
+        L"  module-remove <id> remove a module from FIRI Unlocker\n"
         L"  devmode on|off    developer mode (removes all restrictions)\n");
 }
 

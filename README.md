@@ -30,6 +30,9 @@ regular sessions as well as Safe Mode / WinPE / WinRE, and requires no installat
 - One-shot quick fixes: `fix-hosts` (reset hosts file to defaults), `fix-proxy` (disable WinINET
   proxy / autoconfig URL), in addition to the interactive fonts/UAC/shell-integration menu
 - Autorun snapshots stored inside the executable; settings likewise (no registry/files)
+- Module system: third-party FIRI Unlocker modules (`.firiumodule`) embedded into the
+  executable and executed in-memory, with import-table capability checks and a developer
+  mode gate for modules that touch the registry, files or network
 - Single-file deployment: static CRT, embedded admin manifest, works offline
 
 ## Building
@@ -80,6 +83,8 @@ firiu/
 │  ├─ efi.cpp/.h            EFI partition check
 │  ├─ cert.cpp/.h           certificate install prompt
 │  ├─ sig.cpp/.h            Authenticode + catalog verification
+│  ├─ firi_api.h            module API surface for third-party modules
+│  ├─ modules.cpp/.h        module runner: in-memory PE mapping, FIRIMETA, module menu
 │  ├─ filerestore.cpp/.h    system file verification vs WinSxS
 │  ├─ quickfixes.cpp/.h     fonts, UAC, shell integration fixes
 │  ├─ hwinfo.cpp/.h         hardware summary

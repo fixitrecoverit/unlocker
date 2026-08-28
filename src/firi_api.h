@@ -9,8 +9,8 @@
  * A module is a small PE (DLL) image compiled against this header, delivered
  * as a .firiumodule file.  It carries a "FIRIMETA" RT_RCDATA resource with a
  * FiriMetaBin descriptor (written by genmeta from the template repo).  FIRI
- * embeds the whole module inside firiu.exe as a "FIRIMOD-<id>" resource and
- * executes it in-memory with a tiny PE mapper -- no extra files, no
+ * embeds the whole module inside FIRI Unlocker as a "FIRIMOD-<id>" resource
+ * and executes it in-memory with a tiny PE mapper -- no extra files, no
  * registry, works in Safe Mode / WinPE / WinRE.
  */
 #pragma once

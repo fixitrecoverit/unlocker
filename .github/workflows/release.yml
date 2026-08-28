@@ -99,7 +99,7 @@ jobs:
         run: |
           TAG="v${VERSION}"
           {
-            echo "${CHANGELOG}"
+            printf '%b' "${CHANGELOG}\n"
             echo ""
             echo "### sha256"
             echo '```'

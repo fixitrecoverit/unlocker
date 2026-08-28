@@ -21,6 +21,7 @@ namespace col
 {
 extern const wchar_t *R, *Dim, *Red, *Grn, *Yel, *Cyn, *Wht, *Inv,
     *HideCur, *ShowCur, *Sel;
+extern const wchar_t *RedB, *Link;
 }
 
 extern std::vector<std::wstring>* g_capture;
@@ -28,6 +29,7 @@ extern std::vector<std::wstring>* g_capture;
 void InitConsole();
 void ClrScr();
 void PauseEnter();
+void OpenUrl(const std::wstring& url);
 
 void Out(const wchar_t* fmt, ...);
 void LastErr(const wchar_t* what);

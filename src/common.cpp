@@ -13,6 +13,7 @@ namespace col
 const wchar_t *R = L"", *Dim = L"", *Red = L"", *Grn = L"", *Yel = L"",
               *Cyn = L"", *Wht = L"", *Inv = L"", *HideCur = L"",
               *ShowCur = L"", *Sel = L"";
+const wchar_t *RedB = L"", *Link = L"";
 }
 
 int BootMode()
@@ -149,6 +150,8 @@ void InitConsole()
                            : (bm == 2 ? L"\x1b[97;41m" : L"\x1b[97;42m");
         col::HideCur = L"\x1b[?25l";
         col::ShowCur = L"\x1b[?25h";
+        col::RedB = L"\x1b[1;91m";
+        col::Link = L"\x1b[4;96m";
     }
 
     SetConsoleTitleW(L"firi unlocker v0.1.1");
@@ -265,6 +268,14 @@ void PauseEnter()
 {
     Out(L"%s[enter] back%s\n", col::Dim, col::R);
     WaitKeys(MatchEnter);
+}
+
+void OpenUrl(const std::wstring& url)
+{
+    HINSTANCE r = ShellExecuteW(NULL, L"open", url.c_str(), NULL, NULL,
+                                SW_SHOWNORMAL);
+    if ((INT_PTR)r <= 32)
+        Out(L"%s[!]%s could not open %s\n", col::Red, col::R, url.c_str());
 }
 
 bool IsElevated()

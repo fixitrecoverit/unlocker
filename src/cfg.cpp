@@ -2,9 +2,9 @@
 #include "common.h"
 
 #define CFG_MAGIC 0x49524946u
-#define CFG_VER 1
+#define CFG_VER 2
 
-CfgBits g_cfg = { true, true, true };
+CfgBits g_cfg = { true, true, true, false };
 
 bool SelfReadResource(const wchar_t* resName, std::vector<BYTE>& out)
 {
@@ -25,7 +25,7 @@ bool SelfReadResource(const wchar_t* resName, std::vector<BYTE>& out)
 void LoadSelfState()
 {
     std::vector<BYTE> blob;
-    g_cfg = CfgBits{ true, true, true };
+    g_cfg = CfgBits{ true, true, true, false };
     if (!SelfReadResource(L"FIRICFG", blob) ||
         blob.size() < sizeof(DWORD) * 2 + sizeof(CfgBits))
         return;
@@ -43,6 +43,8 @@ void LoadSelfState()
         g_cfg.mouse = true;
     if (g_cfg.fontcheck != false && g_cfg.fontcheck != true)
         g_cfg.fontcheck = true;
+    if (g_cfg.devmode != false && g_cfg.devmode != true)
+        g_cfg.devmode = false;
 }
 
 bool SaveCfg()
@@ -61,6 +63,32 @@ bool SaveCfg()
     return true;
 }
 
+/* Self-modifying the running exe: Windows locks the image, so the staged
+ * copy ("<self>.new") is produced, the live file is briefly renamed aside
+ * ("<self>.prev") to free the name, and the new copy is moved into place.
+ * The stale "<self>.prev" is transient -- deleted on reboot
+ * (MOVEFILE_DELAY_UNTIL_REBOOT) and cleaned again at next launch by
+ * StartupCleanupSelf.  No persistent "firiu.exe.old" is ever left behind. */
+static bool SwapSelf()
+{
+    std::wstring self = SelfPath();
+    if (self.empty())
+        return false;
+
+    std::wstring tmp = self + L".new";
+    std::wstring prev = self + L".prev";
+
+    if (!MoveFileExW(self.c_str(), prev.c_str(), MOVEFILE_REPLACE_EXISTING))
+        return false;
+    if (!MoveFileExW(tmp.c_str(), self.c_str(), MOVEFILE_REPLACE_EXISTING))
+    {
+        MoveFileExW(prev.c_str(), self.c_str(), MOVEFILE_REPLACE_EXISTING);
+        return false;
+    }
+    MoveFileExW(prev.c_str(), NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
+    return true;
+}
+
 bool SelfWriteResource(const wchar_t* resName, const void* data, DWORD cb)
 {
     std::wstring self = SelfPath();
@@ -68,8 +96,6 @@ bool SelfWriteResource(const wchar_t* resName, const void* data, DWORD cb)
         return false;
 
     std::wstring tmp = self + L".new";
-    std::wstring old = self + L".old";
-
     DeleteFileW(tmp.c_str());
     if (!CopyFileW(self.c_str(), tmp.c_str(), FALSE))
         return false;
@@ -92,20 +118,46 @@ bool SelfWriteResource(const wchar_t* resName, const void* data, DWORD cb)
         return false;
     }
 
-    if (!MoveFileExW(self.c_str(), old.c_str(), MOVEFILE_REPLACE_EXISTING))
+    if (!SwapSelf())
     {
         DeleteFileW(tmp.c_str());
         return false;
     }
-    if (!MoveFileExW(tmp.c_str(), self.c_str(), MOVEFILE_REPLACE_EXISTING))
+    return true;
+}
+
+bool SelfDeleteResource(const wchar_t* resName)
+{
+    std::wstring self = SelfPath();
+    if (self.empty())
+        return false;
+
+    std::wstring tmp = self + L".new";
+    DeleteFileW(tmp.c_str());
+    if (!CopyFileW(self.c_str(), tmp.c_str(), FALSE))
+        return false;
+
+    HANDLE h = BeginUpdateResourceW(tmp.c_str(), FALSE);
+    if (!h)
     {
-        MoveFileExW(old.c_str(), self.c_str(), MOVEFILE_REPLACE_EXISTING);
+        DeleteFileW(tmp.c_str());
+        return false;
+    }
+    BOOL uok = UpdateResourceW(h, (LPCWSTR)RT_RCDATA, resName,
+                               MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+                               NULL, 0);
+    BOOL eok = EndUpdateResourceW(h, FALSE);
+    if (!uok || !eok)
+    {
         DeleteFileW(tmp.c_str());
         return false;
     }
 
-    if (GetFileAttributesW(old.c_str()) != INVALID_FILE_ATTRIBUTES)
-        MoveFileExW(old.c_str(), NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
+    if (!SwapSelf())
+    {
+        DeleteFileW(tmp.c_str());
+        return false;
+    }
     return true;
 }
 
@@ -116,4 +168,5 @@ void StartupCleanupSelf()
         return;
     DeleteFileW((self + L".old").c_str());
     DeleteFileW((self + L".new").c_str());
+    DeleteFileW((self + L".prev").c_str());
 }

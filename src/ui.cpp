@@ -16,14 +16,34 @@ struct MenuState
 
 static void DrawItem(MenuState& st, int idx, bool hover)
 {
+    const MenuItem& it = st.items[idx];
+    if (it.disabled)
+    {
+        Out(L" %s%c%s %s[%c]%s %-22s",
+            col::Dim, L" ", col::R,
+            col::Dim, (wchar_t)it.key, col::R, it.label);
+        return;
+    }
     Out(L" %s%s%s %s[%c]%s %-22s",
         hover ? col::Sel : L"",
         hover ? L">" : L" ",
         hover ? col::R : L"",
         col::Wht,
-        (wchar_t)st.items[idx].key,
+        (wchar_t)it.key,
         col::R,
-        st.items[idx].label);
+        it.label);
+}
+
+static int NextSel(MenuState& st, int step)
+{
+    int sel = st.sel;
+    for (int n = 0; n < st.count; n++)
+    {
+        sel = (sel + step + st.count) % st.count;
+        if (!st.items[sel].disabled)
+            return sel;
+    }
+    return st.sel;
 }
 
 static void DrawAll(MenuState& st)
@@ -81,6 +101,10 @@ int RunMenu(const wchar_t* title, const MenuItem* items, int count)
     st.items = items;
     st.count = count;
     st.sel = 0;
+    while (st.sel < st.count && items[st.sel].disabled)
+        st.sel++;
+    if (st.sel >= st.count)
+        st.sel = 0;
 
     HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
     bool interactive = StdinIsConsole();
@@ -114,7 +138,7 @@ int RunMenu(const wchar_t* title, const MenuItem* items, int count)
                 break;
             wchar_t want = (wchar_t)(L'0' + wcstoul(c.c_str(), NULL, 10));
             for (int i = 0; i < count; i++)
-                if (items[i].key == want)
+                if (items[i].key == want && !items[i].disabled)
                     result = i;
             if (result == -2)
                 result = -1;
@@ -135,18 +159,21 @@ int RunMenu(const wchar_t* title, const MenuItem* items, int count)
                 WORD vk = rec[k].Event.KeyEvent.wVirtualKeyCode;
                 wchar_t ch = rec[k].Event.KeyEvent.uChar.AsciiChar;
                 if (vk == VK_UP)
-                    st.sel = (st.sel - 1 + count) % count;
+                    st.sel = NextSel(st, -1);
                 else if (vk == VK_DOWN || vk == VK_TAB)
-                    st.sel = (st.sel + 1) % count;
+                    st.sel = NextSel(st, 1);
                 else if (vk == VK_RETURN)
-                    result = st.sel;
+                {
+                    if (!st.items[st.sel].disabled)
+                        result = st.sel;
+                }
                 else if (vk == VK_ESCAPE)
                     result = -1;
                 else if (ch >= L'0' && ch <= L'9')
                 {
                     wchar_t want = ch;
                     for (int i = 0; i < count; i++)
-                        if (items[i].key == want)
+                        if (items[i].key == want && !items[i].disabled)
                         {
                             result = i;
                             break;
@@ -163,7 +190,7 @@ int RunMenu(const wchar_t* title, const MenuItem* items, int count)
                 {
                     int idx;
                     if (RowFromPoint(m.dwMousePosition.Y, m.dwMousePosition.X, idx) &&
-                        idx < count)
+                        idx < count && !items[idx].disabled)
                     {
                         if (idx != st.sel)
                         {
@@ -178,7 +205,7 @@ int RunMenu(const wchar_t* title, const MenuItem* items, int count)
                 {
                     int idx;
                     if (RowFromPoint(m.dwMousePosition.Y, m.dwMousePosition.X, idx) &&
-                        idx < count)
+                        idx < count && !items[idx].disabled)
                         result = idx;
                 }
             }

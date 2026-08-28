@@ -18,6 +18,7 @@
 #include "watchdog.h"
 #include "cfg.h"
 #include "ui.h"
+#include "modules.h"
 
 static void CmdInfo()
 {
@@ -144,14 +145,18 @@ static void SettingsMenu()
         { '1', L"colors" },
         { '2', L"mouse in menus" },
         { '3', L"font check at launch" },
+        { 'm', L"modules (add / remove / view)" },
+        { 'd', L"developer mode" },
         { '0', L"back" },
     };
     for (;;)
     {
-        Out(L"\ncolors=%s  mouse=%s  fontcheck=%s\n", g_cfg.colors ? L"on" : L"off",
+        Out(L"\ncolors=%s  mouse=%s  fontcheck=%s  devmode=%s\n",
+            g_cfg.colors ? L"on" : L"off",
             g_cfg.mouse ? L"on" : L"off",
-            g_cfg.fontcheck ? L"on" : L"off");
-        int pick = RunMenu(L"settings (saved inside firiu.exe)", items, 4);
+            g_cfg.fontcheck ? L"on" : L"off",
+            g_cfg.devmode ? L"on" : L"off");
+        int pick = RunMenu(L"settings (saved inside firiu.exe)", items, 6);
         if (pick < 0 || items[pick].key == '0')
             break;
         switch (items[pick].key)
@@ -165,6 +170,16 @@ static void SettingsMenu()
         case '3':
             g_cfg.fontcheck = !g_cfg.fontcheck;
             break;
+        case 'm':
+            ClrScr();
+            CmdModules();
+            ClrScr();
+            continue;
+        case 'd':
+            ClrScr();
+            CmdDevMode();
+            ClrScr();
+            continue;
         }
         SaveCfg();
         ClrScr();
@@ -229,12 +244,13 @@ static void MainLoop()
         { 'b', L"mbr/boot signature check" },
         { 'g', L"triage wizard" },
         { 'c', L"clipboard sentry" },
+        { 'm', L"modules" },
         { '0', L"exit" },
     };
 
     for (;;)
     {
-        int pick = RunMenu(L"firiu", items, 22);
+        int pick = RunMenu(L"firiu", items, 23);
         if (pick < 0 || items[pick].key == '0')
             return;
 
@@ -309,6 +325,10 @@ static void MainLoop()
             ClrScr();
             CmdClipSentry();
             break;
+        case 'm':
+            ClrScr();
+            CmdModules();
+            break;
         }
 
         PauseEnter();
@@ -345,7 +365,182 @@ static void Help()
         L"  triage            review autoruns, store keep/danger verdicts\n"
         L"  triage-check      list currently active flagged items\n"
         L"  triage-reset      clear stored verdicts\n"
-        L"  clipsentry        beep on clipboard changes\n");
+        L"  clipsentry        beep on clipboard changes\n"
+        L"  modules           module list / add / remove / view\n"
+        L"  module-add <path> embed a .firiumodule into firiu.exe\n"
+        L"  module-remove <id> remove a module from firiu.exe\n"
+        L"  devmode on|off    developer mode (removes all restrictions)\n");
+}
+
+int ExecCli(int argc, LPWSTR* argv)
+{
+    std::wstring cmd = Lower(argv[1]);
+    int rc = 0;
+
+    if (cmd == L"help" || cmd == L"/?" || cmd == L"-h")
+        Help();
+    else if (cmd == L"info")
+        CmdInfo();
+    else if (cmd == L"ps")
+        CmdPs(false);
+    else if (cmd == L"kill")
+    {
+        EnableDebugPriv();
+        for (int i = 2; i < argc; i++)
+        {
+            std::wstring t = Trim(argv[i]);
+            if (IsAllDigits(t))
+                KillPid((DWORD)wcstoul(t.c_str(), NULL, 10));
+            else if (!t.empty())
+                KillByName(t);
+        }
+    }
+    else if (cmd == L"unlock")
+    {
+        std::wstring path;
+        bool shut = false;
+        for (int i = 2; i < argc; i++)
+        {
+            if (wcscmp(argv[i], L"-k") == 0)
+                shut = true;
+            else if (path.empty())
+                path = argv[i];
+        }
+        if (path.empty())
+        {
+            Help();
+            rc = 2;
+        }
+        else
+        {
+            EnableDebugPriv();
+            CmdUnlock(path, shut);
+        }
+    }
+    else if (cmd == L"autoruns")
+        CmdAutoruns(argc >= 3 && wcscmp(argv[2], L"clean") == 0);
+    else if (cmd == L"services")
+        CmdServices();
+    else if (cmd == L"svc-disable" || cmd == L"svc-delete")
+    {
+        if (argc < 3)
+            rc = 2;
+        else
+            DisableService(argv[2], cmd == L"svc-delete");
+    }
+    else if (cmd == L"restore-files")
+        CmdFileRestore();
+    else if (cmd == L"fix-fonts")
+        QuickFixFonts(true);
+    else if (cmd == L"fix-hosts")
+        CmdFixHosts();
+    else if (cmd == L"fix-proxy")
+        CmdFixProxy();
+    else if (cmd == L"force-uac")
+        CmdForceUac();
+    else if (cmd == L"install-firiu")
+        CmdInstallFiriu();
+    else if (cmd == L"unrestrict")
+        CmdUnrestrict(argc >= 3 && wcscmp(argv[2], L"clean") == 0);
+    else if (cmd == L"tree")
+        CmdTree();
+    else if (cmd == L"handles")
+    {
+        if (argc < 3)
+            rc = 2;
+        else
+            CmdHandles(argv[2]);
+    }
+    else if (cmd == L"ads")
+        CmdAds(argc >= 3 ? argv[2] : L"");
+    else if (cmd == L"net")
+        CmdNet();
+    else if (cmd == L"efi")
+        CmdEfiCheck();
+    else if (cmd == L"mbr")
+        CmdMbr(argc >= 3 ? argv[2] : L"");
+    else if (cmd == L"triage" || cmd == L"triage-wizard")
+        CmdTriageWizard();
+    else if (cmd == L"triage-check")
+        CmdTriageCheck();
+    else if (cmd == L"triage-reset")
+        CmdTriageReset();
+    else if (cmd == L"clipsentry")
+        CmdClipSentry();
+    else if (cmd == L"watchdog")
+    {
+        bool ac = false;
+        for (int i = 2; i < argc; i++)
+            if (wcscmp(argv[i], L"--auto-clean") == 0 ||
+                wcscmp(argv[i], L"-a") == 0)
+                ac = true;
+        CmdWatchdog(ac);
+    }
+    else if (cmd == L"snap-save")
+        CmdSnapSave(argc >= 3 ? argv[2] : L"");
+    else if (cmd == L"snap-list")
+        CmdSnapList();
+    else if (cmd == L"snap-diff")
+        CmdSnapDiff(argc >= 3 ? argv[2] : L"");
+    else if (cmd == L"modules")
+        CmdModules();
+    else if (cmd == L"module-add")
+    {
+        if (argc < 3)
+            rc = 2;
+        else
+            AddModuleFile(argv[2]);
+    }
+    else if (cmd == L"module-remove")
+    {
+        if (argc < 3)
+            rc = 2;
+        else
+            RemoveModule(argv[2]);
+    }
+    else if (cmd == L"devmode")
+    {
+        std::wstring how = argc >= 3 ? Lower(argv[2]) : L"";
+        if (how != L"on" && how != L"off")
+            rc = 2;
+        else
+        {
+            g_cfg.devmode = how == L"on";
+            SaveCfg();
+            Out(L"devmode=%s\n", g_cfg.devmode ? L"on" : L"off");
+        }
+    }
+    else if (cmd == L"settings")
+    {
+        for (int i = 2; i + 1 < argc; i += 2)
+        {
+            std::wstring what = Lower(argv[i]);
+            std::wstring how = Lower(argv[i + 1]);
+            bool on = how == L"on";
+            if (what == L"colors")
+                g_cfg.colors = on;
+            else if (what == L"mouse")
+                g_cfg.mouse = on;
+            else if (what == L"fontcheck")
+                g_cfg.fontcheck = on;
+            else if (what == L"devmode")
+                g_cfg.devmode = on;
+        }
+        Out(L"colors=%s mouse=%s fontcheck=%s devmode=%s\n",
+            g_cfg.colors ? L"on" : L"off",
+            g_cfg.mouse ? L"on" : L"off",
+            g_cfg.fontcheck ? L"on" : L"off",
+            g_cfg.devmode ? L"on" : L"off");
+        SaveCfg();
+    }
+    else
+    {
+        Out(L"%s[!]%s unknown '%s'\n", col::Red, col::R, argv[1]);
+        Help();
+        rc = 2;
+    }
+
+    return rc;
 }
 
 int main()
@@ -354,6 +549,7 @@ int main()
     LoadSelfState();
     g_colorsOff = !g_cfg.colors;
     StartupCleanupSelf();
+    InitModules();
 
     int argc = 0;
     LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
@@ -362,141 +558,7 @@ int main()
 
     if (argc >= 2)
     {
-        std::wstring cmd = Lower(argv[1]);
-        int rc = 0;
-
-        if (cmd == L"help" || cmd == L"/?" || cmd == L"-h")
-            Help();
-        else if (cmd == L"info")
-            CmdInfo();
-        else if (cmd == L"ps")
-            CmdPs(false);
-        else if (cmd == L"kill")
-        {
-            EnableDebugPriv();
-            for (int i = 2; i < argc; i++)
-            {
-                std::wstring t = Trim(argv[i]);
-                if (IsAllDigits(t))
-                    KillPid((DWORD)wcstoul(t.c_str(), NULL, 10));
-                else if (!t.empty())
-                    KillByName(t);
-            }
-        }
-        else if (cmd == L"unlock")
-        {
-            std::wstring path;
-            bool shut = false;
-            for (int i = 2; i < argc; i++)
-            {
-                if (wcscmp(argv[i], L"-k") == 0)
-                    shut = true;
-                else if (path.empty())
-                    path = argv[i];
-            }
-            if (path.empty())
-            {
-                Help();
-                rc = 2;
-            }
-            else
-            {
-                EnableDebugPriv();
-                CmdUnlock(path, shut);
-            }
-        }
-        else if (cmd == L"autoruns")
-            CmdAutoruns(argc >= 3 && wcscmp(argv[2], L"clean") == 0);
-        else if (cmd == L"services")
-            CmdServices();
-        else if (cmd == L"svc-disable" || cmd == L"svc-delete")
-        {
-            if (argc < 3)
-                rc = 2;
-            else
-                DisableService(argv[2], cmd == L"svc-delete");
-        }
-        else if (cmd == L"restore-files")
-            CmdFileRestore();
-        else if (cmd == L"fix-fonts")
-            QuickFixFonts(true);
-        else if (cmd == L"fix-hosts")
-            CmdFixHosts();
-        else if (cmd == L"fix-proxy")
-            CmdFixProxy();
-        else if (cmd == L"force-uac")
-            CmdForceUac();
-        else if (cmd == L"install-firiu")
-            CmdInstallFiriu();
-        else if (cmd == L"unrestrict")
-            CmdUnrestrict(argc >= 3 && wcscmp(argv[2], L"clean") == 0);
-        else if (cmd == L"tree")
-            CmdTree();
-        else if (cmd == L"handles")
-        {
-            if (argc < 3)
-                rc = 2;
-            else
-                CmdHandles(argv[2]);
-        }
-        else if (cmd == L"ads")
-            CmdAds(argc >= 3 ? argv[2] : L"");
-        else if (cmd == L"net")
-            CmdNet();
-        else if (cmd == L"efi")
-            CmdEfiCheck();
-        else if (cmd == L"mbr")
-            CmdMbr(argc >= 3 ? argv[2] : L"");
-        else if (cmd == L"triage" || cmd == L"triage-wizard")
-            CmdTriageWizard();
-        else if (cmd == L"triage-check")
-            CmdTriageCheck();
-        else if (cmd == L"triage-reset")
-            CmdTriageReset();
-        else if (cmd == L"clipsentry")
-            CmdClipSentry();
-        else if (cmd == L"watchdog")
-        {
-            bool ac = false;
-            for (int i = 2; i < argc; i++)
-                if (wcscmp(argv[i], L"--auto-clean") == 0 ||
-                    wcscmp(argv[i], L"-a") == 0)
-                    ac = true;
-            CmdWatchdog(ac);
-        }
-        else if (cmd == L"snap-save")
-            CmdSnapSave(argc >= 3 ? argv[2] : L"");
-        else if (cmd == L"snap-list")
-            CmdSnapList();
-        else if (cmd == L"snap-diff")
-            CmdSnapDiff(argc >= 3 ? argv[2] : L"");
-        else if (cmd == L"settings")
-        {
-            for (int i = 2; i + 1 < argc; i += 2)
-            {
-                std::wstring what = Lower(argv[i]);
-                std::wstring how = Lower(argv[i + 1]);
-                bool on = how == L"on";
-                if (what == L"colors")
-                    g_cfg.colors = on;
-                else if (what == L"mouse")
-                    g_cfg.mouse = on;
-                else if (what == L"fontcheck")
-                    g_cfg.fontcheck = on;
-            }
-            Out(L"colors=%s mouse=%s fontcheck=%s\n",
-                g_cfg.colors ? L"on" : L"off",
-                g_cfg.mouse ? L"on" : L"off",
-                g_cfg.fontcheck ? L"on" : L"off");
-            SaveCfg();
-        }
-        else
-        {
-            Out(L"%s[!]%s unknown '%s'\n", col::Red, col::R, argv[1]);
-            Help();
-            rc = 2;
-        }
-
+        int rc = ExecCli(argc, argv);
         LocalFree(argv);
         return rc;
     }

@@ -6,6 +6,45 @@ namespace
 
 const wchar_t* const kPassword = L"firisigning2026";
 
+std::wstring GetPfxPassword()
+{
+    DWORD sz = GetEnvironmentVariableW(L"FIRI_CERT_PASSWORD", NULL, 0);
+    if (sz > 0)
+    {
+        std::wstring pw(sz, 0);
+        DWORD got = GetEnvironmentVariableW(L"FIRI_CERT_PASSWORD", &pw[0], sz);
+        if (got > 0)
+        {
+            pw.resize(got);
+            return pw;
+        }
+    }
+
+    Out(L"%s[!]%s FIRI_CERT_PASSWORD env var not set; press enter to use the "
+        L"bundled default or type a password:%s ",
+        col::Yel, col::R, col::ShowCur);
+    wchar_t buf[512] = L"";
+    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD mode = 0;
+    bool haveMode = h && h != INVALID_HANDLE_VALUE && GetConsoleMode(h, &mode);
+    if (haveMode)
+        SetConsoleMode(h, (mode & ~ENABLE_ECHO_INPUT) | ENABLE_LINE_INPUT |
+                             ENABLE_PROCESSED_INPUT);
+    wchar_t* r = fgetws(buf, 512, stdin);
+    if (haveMode)
+        SetConsoleMode(h, mode);
+    Out(L"\n");
+    if (!r)
+        return kPassword;
+    size_t n = wcslen(buf);
+    while (n > 0 && (buf[n - 1] == L'\n' || buf[n - 1] == L'\r'))
+        buf[--n] = 0;
+    std::wstring typed = Trim(buf);
+    if (typed.empty())
+        return kPassword;
+    return typed;
+}
+
 std::wstring FindPfx()
 {
     std::wstring self = SelfPath();
@@ -24,7 +63,8 @@ std::wstring FindPfx()
     return std::wstring();
 }
 
-HCERTSTORE OpenPfx(const std::wstring& path, std::wstring& subject)
+HCERTSTORE OpenPfx(const std::wstring& path, const std::wstring& password,
+                   std::wstring& subject)
 {
     subject.clear();
 
@@ -47,7 +87,8 @@ HCERTSTORE OpenPfx(const std::wstring& path, std::wstring& subject)
     pfx.cbData = got;
     pfx.pbData = blob.data();
 
-    HCERTSTORE hs = PFXImportCertStore(&pfx, kPassword, CRYPT_EXPORTABLE);
+    HCERTSTORE hs = PFXImportCertStore(&pfx, password.empty() ? NULL : password.c_str(),
+                                       CRYPT_EXPORTABLE);
     if (!hs)
         return NULL;
 
@@ -105,7 +146,7 @@ bool AddToStore(const wchar_t* storeName, const CERT_CONTEXT* ctx)
     return ok != FALSE;
 }
 
-} 
+}
 
 void StartupCertCheck()
 {
@@ -114,12 +155,14 @@ void StartupCertCheck()
         return;
 
     std::wstring subject;
-    HCERTSTORE mem = OpenPfx(pfx, subject);
+    std::wstring password = GetPfxPassword();
+    HCERTSTORE mem = OpenPfx(pfx, password, subject);
     if (!mem || subject.empty())
     {
         if (mem)
             CertCloseStore(mem, CERT_CLOSE_STORE_FORCE_FLAG);
-        Out(L"%s[!] could not read FIRI_Project.pfx%s\n", col::Yel, col::R);
+        Out(L"%s[!] could not read FIRI_Project.pfx (wrong password or "
+            L"corrupt pfx)%s\n", col::Yel, col::R);
         return;
     }
 
@@ -132,7 +175,7 @@ void StartupCertCheck()
             col::Cyn, col::R);
         Out(L"This will remove the smartscreen warning and will make "
             L"Windows trust FIRI Unlocker.\n");
-        if (!AskYNDef(L"install?"))
+        if (!AskYNDef(L"install (into TrustedPublisher and ROOT)?"))
         {
             CertCloseStore(mem, CERT_CLOSE_STORE_FORCE_FLAG);
             return;

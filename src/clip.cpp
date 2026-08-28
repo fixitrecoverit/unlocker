@@ -32,7 +32,7 @@ std::wstring Sanitize(const wchar_t* s, size_t maxch)
     return out;
 }
 
-} 
+}
 
 void CmdClipSentry()
 {

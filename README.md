@@ -27,6 +27,8 @@ regular sessions as well as Safe Mode / WinPE / WinRE, and requires no installat
 - EFI System Partition mount + signature audit
 - Clipboard monitoring daemon
 - System file restore from WinSxS, font repair, UAC re-enable, Explorer/CMD policy unrestrict
+- One-shot quick fixes: `fix-hosts` (reset hosts file to defaults), `fix-proxy` (disable WinINET
+  proxy / autoconfig URL), in addition to the interactive fonts/UAC/shell-integration menu
 - Autorun snapshots stored inside the executable; settings likewise (no registry/files)
 - Single-file deployment: static CRT, embedded admin manifest, works offline
 

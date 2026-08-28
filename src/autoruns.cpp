@@ -491,7 +491,7 @@ void ScanTasks(bool clean)
     }
 }
 
-} 
+}
 
 void CmdAutoruns(bool clean)
 {

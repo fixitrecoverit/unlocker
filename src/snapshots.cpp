@@ -2,6 +2,7 @@
 #include "common.h"
 #include "autoruns.h"
 #include "cfg.h"
+#include <unordered_set>
 
 #define SNAP_MAGIC 0x504E5346u
 
@@ -100,18 +101,7 @@ bool CaptureScan(std::vector<std::wstring>& lines)
     for (size_t i = 0; i < chunks.size(); i++)
         all += chunks[i];
 
-    size_t s = 0;
-    while (s < all.size())
-    {
-        size_t e = all.find(L'\n', s);
-        if (e == std::wstring::npos)
-            e = all.size();
-        std::wstring line = all.substr(s, e - s);
-        while (!line.empty() && (line.back() == L'\r'))
-            line.pop_back();
-        lines.push_back(line);
-        s = e + 1;
-    }
+    SplitLines(all, lines);
     return !lines.empty();
 }
 
@@ -133,7 +123,7 @@ int FindSnap(const std::vector<SnapRec>& snaps, const std::wstring& name)
     return -1;
 }
 
-} 
+}
 
 void CmdSnapSave(const std::wstring& name)
 {
@@ -228,54 +218,34 @@ void CmdSnapDiff(const std::wstring& name)
                         (int)snaps[idx].data.size(), wbuf.data(), wneed);
     std::wstring oldAll(wbuf.data(), wneed);
     std::vector<std::wstring> was;
-    size_t s = 0;
-    while (s < oldAll.size())
-    {
-        size_t e = oldAll.find(L'\n', s);
-        if (e == std::wstring::npos)
-            e = oldAll.size();
-        std::wstring line = oldAll.substr(s, e - s);
-        while (!line.empty() && line.back() == L'\r')
-            line.pop_back();
-        was.push_back(line);
-        s = e + 1;
-    }
+    SplitLines(oldAll, was);
 
-    std::vector<int> nowCount(now.size(), 1), wasCount(was.size(), 1);
+    std::unordered_multiset<std::wstring> wasBag(was.begin(), was.end());
     int added = 0, removed = 0;
 
     Out(L"\n%s--- new since '%s' ---%s\n", col::Cyn, name.c_str(), col::R);
     for (size_t i = 0; i < now.size(); i++)
     {
-        bool found = false;
-        for (size_t j = 0; j < was.size(); j++)
-            if (wasCount[j] && was[j] == now[i])
-            {
-                wasCount[j] = 0;
-                found = true;
-                break;
-            }
-        if (!found)
+        std::unordered_multiset<std::wstring>::iterator it =
+            wasBag.find(now[i]);
+        if (it != wasBag.end())
+            wasBag.erase(it);
+        else
         {
             Out(L"%s+ %s%s\n", col::Grn, now[i].c_str(), col::R);
             added++;
         }
     }
 
+    std::unordered_multiset<std::wstring> nowBag(now.begin(), now.end());
     Out(L"\n%s--- gone since '%s' ---%s\n", col::Cyn, name.c_str(), col::R);
     for (size_t j = 0; j < was.size(); j++)
     {
-        if (!wasCount[j])
-            continue;
-        bool still = false;
-        for (size_t i = 0; i < now.size(); i++)
-            if (nowCount[i] && now[i] == was[j])
-            {
-                nowCount[i] = 0;
-                still = true;
-                break;
-            }
-        if (!still)
+        std::unordered_multiset<std::wstring>::iterator it =
+            nowBag.find(was[j]);
+        if (it != nowBag.end())
+            nowBag.erase(it);
+        else
         {
             Out(L"%s- %s%s\n", col::Red, was[j].c_str(), col::R);
             removed++;

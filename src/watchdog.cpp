@@ -1,4 +1,4 @@
-#include "autoruns.h"
+#include "watchdog.h"
 #include "cfg.h"
 #include <map>
 
@@ -112,7 +112,7 @@ bool RemoveDebugger(const std::wstring& key)
     return ok == ERROR_SUCCESS;
 }
 
-} 
+}
 
 void CmdWatchdog(bool autoclean)
 {

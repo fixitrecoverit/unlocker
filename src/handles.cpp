@@ -6,20 +6,30 @@
 namespace
 {
 
-typedef struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO
+typedef struct _SYSTEM_HANDLE_TABLE_ENTRY_INFO_EX
 {
-    USHORT UniqueProcessId;
+    PVOID Object;
+    ULONG_PTR UniqueProcessId;
+    ULONG_PTR HandleValue;
+    ULONG GrantedAccess;
+    USHORT CreatorBackTraceIndex;
     USHORT ObjectTypeIndex;
-    UCHAR HandleAttributes;
-    UCHAR GrantedAccess;
-    USHORT HandleValue;
-} SHTEI;
+    ULONG HandleAttributes;
+    ULONG Reserved;
+} SHTEIEX;
 
-typedef struct _SYSTEM_HANDLE_INFORMATION
+typedef struct _SYSTEM_HANDLE_INFORMATION_EX
 {
-    ULONG NumberOfHandles;
-    SHTEI Handles[1];
-} SHI;
+    ULONG_PTR NumberOfHandles;
+    ULONG_PTR Reserved;
+    SHTEIEX Handles[1];
+} SHIEX;
+
+enum
+{
+    kSystemExtendedHandleInformation = 64,
+    kObjectNameInformation = 1,
+};
 
 typedef LONG(NTAPI* FN_NtQuerySystemInformation)(ULONG, PVOID, ULONG, PULONG);
 typedef LONG(NTAPI* FN_NtQueryObject)(HANDLE, ULONG, PVOID, ULONG, PULONG);
@@ -44,7 +54,8 @@ struct NameJob
 DWORD WINAPI NameThread(LPVOID p)
 {
     NameJob* j = (NameJob*)p;
-    j->status = j->fn(j->handle, 1, j->buf, sizeof(j->buf), &j->need);
+    j->status = j->fn(j->handle, kObjectNameInformation, j->buf,
+                      sizeof(j->buf), &j->need);
     j->finished = true;
     return 0;
 }
@@ -106,7 +117,7 @@ std::wstring DeviceToDos(const std::wstring& name,
     return std::wstring();
 }
 
-} 
+}
 
 void CmdHandles(const std::wstring& targetIn)
 {
@@ -152,7 +163,8 @@ void CmdHandles(const std::wstring& targetIn)
     LONG st = 0;
     for (;;)
     {
-        st = qsi(16, info.data(), (ULONG)info.size(), &need);
+        st = qsi(kSystemExtendedHandleInformation, info.data(),
+                 (ULONG)info.size(), &need);
         if (st == 0)
             break;
         if (need == 0 || need > (64u << 20))
@@ -163,7 +175,7 @@ void CmdHandles(const std::wstring& targetIn)
         info.resize(need + (1 << 16));
     }
 
-    SHI* hi = (SHI*)info.data();
+    SHIEX* hi = (SHIEX*)info.data();
     std::map<std::wstring, std::wstring> dm = BuildDeviceMap();
 
     struct Holder
@@ -174,10 +186,10 @@ void CmdHandles(const std::wstring& targetIn)
     std::vector<Holder> found;
     std::set<DWORD> seenPid;
 
-    for (ULONG i = 0; i < hi->NumberOfHandles; i++)
+    for (ULONG_PTR i = 0; i < hi->NumberOfHandles; i++)
     {
-        const SHTEI& h = hi->Handles[i];
-        DWORD pid = h.UniqueProcessId;
+        const SHTEIEX& h = hi->Handles[i];
+        DWORD pid = (DWORD)h.UniqueProcessId;
         if (pid == GetCurrentProcessId() || !names.count(pid))
             continue;
         if (seenPid.count(pid))
@@ -187,7 +199,7 @@ void CmdHandles(const std::wstring& targetIn)
         if (!p)
             continue;
         HANDLE dup = NULL;
-        BOOL ok = DuplicateHandle(p, (HANDLE)(ULONG_PTR)h.HandleValue,
+        BOOL ok = DuplicateHandle(p, (HANDLE)h.HandleValue,
                                   GetCurrentProcess(), &dup, 0, FALSE,
                                   DUPLICATE_SAME_ACCESS);
         CloseHandle(p);

@@ -1,5 +1,7 @@
 #include "quickfixes.h"
 #include "filerestore.h"
+#include <shlobj.h>
+#include <objbase.h>
 
 namespace
 {
@@ -119,7 +121,7 @@ void RebuildFontCache()
     DeleteFileW((WinDir() + L"\\System32\\FNTCACHE.DAT").c_str());
 }
 
-} 
+}
 
 static int g_fontRepaired = 0;
 
@@ -135,33 +137,12 @@ int QuickFixFonts(bool interactive)
 
     if (!missingNames.empty())
     {
-        typedef std::map<std::wstring, std::vector<std::wstring> > StoreMap;
         StoreMap store;
-        {
-            std::wstring sxdir = WinDir() + L"\\WinSxS";
-            WIN32_FIND_DATAW fd;
-            HANDLE fh = FindFirstFileW((sxdir + L"\\*").c_str(), &fd);
-            if (fh != INVALID_HANDLE_VALUE)
-            {
-                do
-                {
-                    if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-                        continue;
-                    std::wstring dir = sxdir + L"\\" + fd.cFileName;
-                    for (size_t i = 0; i < missingNames.size(); i++)
-                    {
-                        std::wstring cand = dir + L"\\" + missingNames[i];
-                        if (GetFileAttributesW(cand.c_str()) != INVALID_FILE_ATTRIBUTES)
-                            store[missingNames[i]].push_back(cand);
-                    }
-                } while (FindNextFileW(fh, &fd));
-                FindClose(fh);
-            }
-        }
+        ScanWinSxS(store, missingNames);
 
         for (size_t i = 0; i < missingNames.size(); i++)
         {
-            StoreMap::iterator it = store.find(missingNames[i]);
+            StoreMap::iterator it = store.find(LowerCopy(missingNames[i]));
             if (it == store.end() || it->second.empty())
             {
                 missingNoSource++;
@@ -292,22 +273,23 @@ void CmdInstallFiriu()
     else
         LastErr(L"app paths");
 
-    std::wstring appsDir = L"C:\\Users\\" +
-                           [](void) -> std::wstring {
-                               wchar_t u[256];
-                               DWORD n = 256;
-                               GetUserNameW(u, &n);
-                               return u;
-                           }() +
-                           L"\\AppData\\Local\\Microsoft\\WindowsApps";
-    std::wstring link = appsDir + L"\\firiu.exe";
-    if (CopyFileW(self.c_str(), link.c_str(), FALSE))
+    std::wstring appsDir;
+    PWSTR la = NULL;
+    if (SHGetKnownFolderPath(FOLDERID_LocalAppData, 0, NULL, &la) == S_OK)
+    {
+        appsDir = std::wstring(la) + L"\\Microsoft\\WindowsApps";
+        CoTaskMemFree(la);
+    }
+    std::wstring link;
+    if (!appsDir.empty())
+        link = appsDir + L"\\firiu.exe";
+    if (!link.empty() && CopyFileW(self.c_str(), link.c_str(), FALSE))
         Out(L"%s[+]%s 'firiu' works in cmd now (%s)\n", col::Grn, col::R,
             link.c_str());
     else
         Out(L"%s[!]%s couldn't drop into windowsapps (%s) - add firi's folder "
              "to PATH manually\n",
-            col::Yel, col::R, link.c_str());
+            col::Yel, col::R, link.empty() ? L"no known folder" : link.c_str());
 
     if (AskYN(L"also start firiu at logon?"))
     {

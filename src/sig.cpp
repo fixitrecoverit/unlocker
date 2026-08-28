@@ -69,6 +69,7 @@ static int VerifyOnce(const std::wstring& file)
 
 int VerifyFileSig(const std::wstring& file)
 {
+    static const size_t kMaxCache = 4096;
     static std::map<std::wstring, int> cache;
     std::wstring key = Lower(file);
     std::map<std::wstring, int>::iterator it = cache.find(key);
@@ -79,31 +80,37 @@ int VerifyFileSig(const std::wstring& file)
     DWORD attr = GetFileAttributesW(file.c_str());
     if (attr != INVALID_FILE_ATTRIBUTES && !(attr & FILE_ATTRIBUTE_DIRECTORY))
         res = VerifyOnce(Lower(file));
+    if (cache.size() >= kMaxCache)
+        cache.clear();
     cache[key] = res;
     return res;
 }
 
 static bool ExtractExePath(const std::wstring& raw, std::wstring& out)
 {
-    std::wstring v = raw;
+    std::wstring v = Trim(raw);
+    if (v.empty())
+        return false;
     if (v.find(L'%') != std::wstring::npos)
     {
         wchar_t buf[2048];
         if (ExpandEnvironmentStringsW(v.c_str(), buf, 2048))
-            v = buf;
+            v = Trim(buf);
     }
+    if (v.empty())
+        return false;
 
-    size_t p = v.find(L'"');
-    if (p != std::wstring::npos)
+    if (v[0] == L'"')
     {
-        size_t e = v.find(L'"', p + 1);
+        size_t e = v.find(L'"', 1);
         if (e != std::wstring::npos)
         {
-            std::wstring cand = Trim(v.substr(p + 1, e - p - 1));
+            std::wstring cand = Trim(v.substr(1, e - 1));
+            std::wstring cl = Lower(cand);
             if (!cand.empty() &&
-                (Lower(cand).find(L".exe") != std::wstring::npos ||
-                 Lower(cand).find(L".dll") != std::wstring::npos ||
-                 Lower(cand).find(L".sys") != std::wstring::npos))
+                (cl.find(L".exe") != std::wstring::npos ||
+                 cl.find(L".dll") != std::wstring::npos ||
+                 cl.find(L".sys") != std::wstring::npos))
             {
                 out = cand;
                 return true;
@@ -119,12 +126,10 @@ static bool ExtractExePath(const std::wstring& raw, std::wstring& out)
         x = low.find(L".sys");
     if (x == std::wstring::npos)
         return false;
-
-    size_t s = 0;
-    for (size_t i = 0; i < x + 4; i++)
-        if (v[i] == L' ' || v[i] == L'\t')
-            s = i + 1;
-    out = Trim(v.substr(s, x + 4 - s));
+    size_t end = x + 4;
+    if (end < v.size() && v[end] != L' ' && v[end] != L'\t')
+        return false;
+    out = Trim(v.substr(0, end));
     return !out.empty();
 }
 

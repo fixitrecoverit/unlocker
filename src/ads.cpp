@@ -89,10 +89,10 @@ void Report(const std::vector<Hit>& hits)
             continue;
         bool exeish = Lower(h.stream).find(L".exe") != std::wstring::npos ||
                       Lower(h.stream).find(L".dll") != std::wstring::npos;
-        Out(L"%s%s%s\n  stream %s (%llu bytes)%s\n",
+        bool colored = exeish || !h.zone;
+        Out(L"%s%s%s\n  stream %s (%llu bytes)\n",
             exeish ? col::Red : (h.zone ? L"" : col::Yel), h.file.c_str(),
-            exeish ? L"" : col::R, h.stream.c_str(), h.size,
-            h.zone ? L"" : L"");
+            colored ? col::R : L"", h.stream.c_str(), h.size);
         if (h.zone)
             Out(L"%s   [zone marker]%s\n", col::Dim, col::R);
         if (!h.zone)
@@ -104,7 +104,7 @@ void Report(const std::vector<Hit>& hits)
         Out(L"\n%d stream(s) (%d non-zone)\n", (int)hits.size(), suspicious);
 }
 
-} 
+}
 
 void CmdAds(const std::wstring& pathIn)
 {

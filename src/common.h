@@ -47,6 +47,7 @@ std::wstring Lower(const std::wstring& s);
 std::wstring Trim(const wchar_t* s);
 std::wstring Trim(const std::wstring& s);
 bool IsAllDigits(const std::wstring& s);
+void SplitLines(const std::wstring& text, std::vector<std::wstring>& lines);
 std::wstring PromptLine(const wchar_t* label);
 bool AskYN(const wchar_t* question);
 bool AskYNDef(const wchar_t* question);

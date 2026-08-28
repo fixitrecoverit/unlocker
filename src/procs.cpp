@@ -63,8 +63,24 @@ typedef struct _FIRI_PROC
     LARGE_INTEGER OtherTransferCount;
 } FIRI_PROC;
 
-static const ULONG kStateWaiting = 5;
-static const ULONG kReasonSuspended = 5;
+static const ULONG kStateWaiting = 4;  /* KTHREAD_STATE.Waiting */
+static const ULONG kReasonSuspended = 5; /* KWAIT_REASON.Suspended */
+static const ULONG kSystemProcessInformation = 5;
+static const ULONG kStatusInfoLengthMismatch = 0xC0000004; /* STATUS_INFO_LENGTH_MISMATCH */
+
+#ifdef _WIN64
+static_assert(sizeof(FIRI_THREAD) == 0x50, "FIRI_THREAD must match x64 SYSTEM_THREAD_INFORMATION");
+static_assert(FIELD_OFFSET(FIRI_THREAD, ThreadState) == 0x44,
+              "ThreadState must be at 0x44 (x64 SYSTEM_THREAD_INFORMATION)");
+static_assert(FIELD_OFFSET(FIRI_THREAD, WaitReason) == 0x48,
+              "WaitReason must be at 0x48 (x64 SYSTEM_THREAD_INFORMATION)");
+#else
+static_assert(sizeof(FIRI_THREAD) == 0x3C, "FIRI_THREAD must match x86 SYSTEM_THREAD_INFORMATION");
+static_assert(FIELD_OFFSET(FIRI_THREAD, ThreadState) == 0x34,
+              "ThreadState must be at 0x34 (x86 SYSTEM_THREAD_INFORMATION)");
+static_assert(FIELD_OFFSET(FIRI_THREAD, WaitReason) == 0x38,
+              "WaitReason must be at 0x38 (x86 SYSTEM_THREAD_INFORMATION)");
+#endif
 
 static bool QuerySuspendedMap(std::map<DWORD, bool>& out)
 {
@@ -82,7 +98,7 @@ static bool QuerySuspendedMap(std::map<DWORD, bool>& out)
     {
         std::vector<BYTE> buf(len);
         ULONG need = 0;
-        LONG st = q(5 /*SystemProcessInformation*/, (PVOID*)buf.data(), len, &need);
+        LONG st = q(kSystemProcessInformation, (PVOID*)buf.data(), len, &need);
         if (st == 0)
         {
             BYTE* p = buf.data();
@@ -104,7 +120,7 @@ static bool QuerySuspendedMap(std::map<DWORD, bool>& out)
             }
             return true;
         }
-        if (st != (LONG)0xC0000004 /*STATUS_INFO_LENGTH_MISMATCH*/)
+        if (st != (LONG)kStatusInfoLengthMismatch)
             return false;
         len = need ? need + (1 << 20) : len * 2;
     }
@@ -242,8 +258,7 @@ void CmdPs(bool live)
     Out(L"%s[esc/q] stop%s\n", col::Dim, col::R);
     for (;;)
     {
-        CONSOLE_SCREEN_BUFFER_INFO bi;
-        GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &bi);
+        ClrScr();
         RenderPs();
 
         Sleep(1000);
@@ -266,8 +281,6 @@ void CmdPs(bool live)
         }
         if (quit)
             break;
-
-        SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), bi.dwCursorPosition);
     }
 }
 

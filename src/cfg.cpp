@@ -6,13 +6,6 @@
 
 CfgBits g_cfg = { true, true, true };
 
-static std::wstring SelfPathEx()
-{
-    wchar_t p[MAX_PATH + 8];
-    DWORD n = GetModuleFileNameW(NULL, p, MAX_PATH + 4);
-    return (n && n < MAX_PATH + 4) ? std::wstring(p) : std::wstring();
-}
-
 bool SelfReadResource(const wchar_t* resName, std::vector<BYTE>& out)
 {
     HRSRC rs = FindResourceW(NULL, resName, (LPCWSTR)RT_RCDATA);
@@ -46,6 +39,10 @@ void LoadSelfState()
     memcpy(&g_cfg, blob.data() + 8, sizeof(CfgBits));
     if (g_cfg.colors != false && g_cfg.colors != true)
         g_cfg.colors = true;
+    if (g_cfg.mouse != false && g_cfg.mouse != true)
+        g_cfg.mouse = true;
+    if (g_cfg.fontcheck != false && g_cfg.fontcheck != true)
+        g_cfg.fontcheck = true;
 }
 
 bool SaveCfg()
@@ -66,7 +63,7 @@ bool SaveCfg()
 
 bool SelfWriteResource(const wchar_t* resName, const void* data, DWORD cb)
 {
-    std::wstring self = SelfPathEx();
+    std::wstring self = SelfPath();
     if (self.empty())
         return false;
 
@@ -107,28 +104,14 @@ bool SelfWriteResource(const wchar_t* resName, const void* data, DWORD cb)
         return false;
     }
 
-    std::wstring cmd = L"/c ping -n 3 127.0.0.1 >nul & del /f /q \"" +
-                       old + L"\"";
-    STARTUPINFOW si;
-    PROCESS_INFORMATION pi;
-    memset(&si, 0, sizeof(si));
-    si.cb = sizeof(si);
-    si.dwFlags = STARTF_USESHOWWINDOW;
-    si.wShowWindow = SW_HIDE;
-    std::vector<wchar_t> cmdbuf(cmd.begin(), cmd.end());
-    cmdbuf.push_back(0);
-    if (CreateProcessW(L"C:\\Windows\\System32\\cmd.exe", cmdbuf.data(), NULL,
-                       NULL, FALSE, CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
-    {
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
-    }
+    if (GetFileAttributesW(old.c_str()) != INVALID_FILE_ATTRIBUTES)
+        MoveFileExW(old.c_str(), NULL, MOVEFILE_DELAY_UNTIL_REBOOT);
     return true;
 }
 
 void StartupCleanupSelf()
 {
-    std::wstring self = SelfPathEx();
+    std::wstring self = SelfPath();
     if (self.empty())
         return;
     DeleteFileW((self + L".old").c_str());

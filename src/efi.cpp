@@ -12,6 +12,19 @@ struct EfiFile
     int sig;
 };
 
+bool HasExt(const std::wstring& name, const wchar_t* ext)
+{
+    return name.size() >= wcslen(ext) &&
+           name.compare(name.size() - wcslen(ext), wcslen(ext), ext) == 0;
+}
+
+bool IsEfiInterest(const std::wstring& name)
+{
+    return HasExt(name, L".efi") || HasExt(name, L".bin") ||
+           HasExt(name, L".dll") || HasExt(name, L".pem") ||
+           HasExt(name, L".cer");
+}
+
 void WalkEfi(const std::wstring& dir, int depth, std::vector<EfiFile>& out)
 {
     if (depth > 5 || out.size() > 500)
@@ -33,16 +46,8 @@ void WalkEfi(const std::wstring& dir, int depth, std::vector<EfiFile>& out)
             continue;
         }
         std::wstring low = Lower(fd.cFileName);
-        if (low.size() < 4)
+        if (!IsEfiInterest(low))
             continue;
-        if (low.rfind(L".efi") != low.size() - 4)
-        {
-            if (low.rfind(L".bin") != low.size() - 4 &&
-                low.rfind(L".dll") != low.size() - 4 &&
-                low.rfind(L".pem") != low.size() - 4 &&
-                low.rfind(L".cer") != low.size() - 4)
-                continue;
-        }
         EfiFile e;
         e.path = full;
         e.size = ((unsigned long long)fd.nFileSizeHigh << 32) |
@@ -63,11 +68,20 @@ std::wstring FtStr(const FILETIME& ft)
     return b;
 }
 
-} 
+wchar_t FreeDrive()
+{
+    DWORD mask = GetLogicalDrives();
+    for (wchar_t c = L'Z'; c >= L'D'; c--)
+        if (!(mask & (1u << (c - L'A'))))
+            return c;
+    return L'Z';
+}
+
+}
 
 void CmdEfiCheck()
 {
-    wchar_t vol = L'Z';
+    wchar_t vol = FreeDrive();
     std::wstring mount = std::wstring(1, vol) + L":";
     std::wstring cmd = L"/c mountvol " + mount + L" /S";
 

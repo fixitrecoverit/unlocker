@@ -80,80 +80,7 @@ void CmdFixProxy()
     Out(L"[i] note: some malware sets WinHTTP proxy too ('netsh winhttp reset proxy')\n");
 }
 
-void CmdIfeo(bool clean)
-{
-    static const wchar_t* base =
-        L"Software\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options";
-    int hits = 0;
-
-    for (int view = 0; view < 2; view++)
-    {
-        if (view == 1 && sizeof(void*) != 8)
-            break;
-        REGSAM extra = (view == 1) ? KEY_WOW64_32KEY : KEY_WOW64_64KEY;
-
-        HKEY k;
-        if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, base, 0, KEY_READ | extra, &k) != ERROR_SUCCESS)
-            continue;
-
-        DWORD subs = 0, maxSub = 0;
-        if (RegQueryInfoKeyW(k, NULL, NULL, NULL, &subs, &maxSub, NULL, NULL,
-                             NULL, NULL, NULL, NULL) != ERROR_SUCCESS || subs == 0)
-        {
-            RegCloseKey(k);
-            continue;
-        }
-
-        std::vector<wchar_t> name(maxSub + 2, 0);
-        for (DWORD i = 0; i < subs; i++)
-        {
-            DWORD nl = (DWORD)name.size();
-            if (RegEnumKeyExW(k, i, name.data(), &nl, NULL, NULL, NULL, NULL) != ERROR_SUCCESS)
-                continue;
-
-            HKEY sk;
-            if (RegOpenKeyExW(k, name.data(), 0, KEY_READ | extra, &sk) != ERROR_SUCCESS)
-                continue;
-
-            DWORD ty = 0, sz = 0;
-            if (RegQueryValueExW(sk, L"Debugger", NULL, &ty, NULL, &sz) == ERROR_SUCCESS &&
-                (ty == REG_SZ || ty == REG_EXPAND_SZ) && sz >= sizeof(wchar_t))
-            {
-                std::vector<BYTE> buf(sz + sizeof(wchar_t), 0);
-                DWORD got = sz;
-                hits++;
-                if (RegQueryValueExW(sk, L"Debugger", NULL, &ty, buf.data(), &got) == ERROR_SUCCESS)
-                {
-                    Out(L"[?] hijack %s view: %s -> Debugger = \"%s\"\n",
-                        (view == 1) ? L"WOW64" : L"NATIVE",
-                        name.data(),
-                        (const wchar_t*)buf.data());
-                    if (clean && AskYN(L"      remove this Debugger hijack?"))
-                    {
-                        HKEY wk;
-                        if (RegOpenKeyExW(k, name.data(), 0, KEY_SET_VALUE | extra, &wk) == ERROR_SUCCESS)
-                        {
-                            if (RegDeleteValueW(wk, L"Debugger") == ERROR_SUCCESS)
-                                Out(L"      [+] removed\n");
-                            else
-                                LastErr(L"RegDeleteValue");
-                            RegCloseKey(wk);
-                        }
-                        else
-                            LastErr(L"open for write");
-                    }
-                }
-            }
-            RegCloseKey(sk);
-        }
-        RegCloseKey(k);
-    }
-
-    if (hits)
-        Out(L"[i] %d IFEO debugger hijack(s) seen\n", hits);
-    else
-        Out(L"[+] no IFEO debugger hijacks found\n");
-}
+void CmdIfeo(bool clean);
 
 namespace
 {
@@ -273,7 +200,7 @@ void SweepDisallowRun(HKEY root, bool fix)
     RegCloseKey(k);
 }
 
-} 
+}
 
 void CmdUnrestrict(bool fix)
 {

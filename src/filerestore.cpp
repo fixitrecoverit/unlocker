@@ -1,5 +1,40 @@
 #include "filerestore.h"
 
+std::wstring LowerCopy(std::wstring s)
+{
+    for (size_t i = 0; i < s.size(); i++)
+        s[i] = (wchar_t)towlower(s[i]);
+    return s;
+}
+
+bool ScanWinSxS(StoreMap& found, const std::vector<std::wstring>& names)
+{
+    std::wstring sxdir = WinDir() + L"\\WinSxS";
+    std::wstring pattern = sxdir + L"\\*";
+    WIN32_FIND_DATAW fd;
+    HANDLE fh = FindFirstFileW(pattern.c_str(), &fd);
+    if (fh == INVALID_HANDLE_VALUE)
+        return false;
+
+    do
+    {
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
+            continue;
+        if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0)
+            continue;
+        std::wstring dir = sxdir + L"\\" + fd.cFileName;
+        for (size_t i = 0; i < names.size(); i++)
+        {
+            std::wstring cand = dir + L"\\" + names[i];
+            DWORD a = GetFileAttributesW(cand.c_str());
+            if (a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY))
+                found[LowerCopy(names[i])].push_back(cand);
+        }
+    } while (FindNextFileW(fh, &fd));
+    FindClose(fh);
+    return true;
+}
+
 namespace
 {
 
@@ -10,7 +45,6 @@ const struct
 } kTargets[] = {
     { L"explorer.exe", true },   { L"cmd.exe", false },
     { L"sethc.exe", false },     { L"utilman.exe", false },
-    { L"magnify.exe", false },   { L"osk.exe", false },
     { L"Narrator.exe", false },  { L"displayswitch.exe", false },
     { L"atbroker.exe", false },  { L"taskmgr.exe", false },
     { L"regedit.exe", true },    { L"wscript.exe", false },
@@ -50,43 +84,6 @@ bool GetFileSize2(const std::wstring& path, ULONGLONG* size)
     if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &fa))
         return false;
     *size = ((ULONGLONG)fa.nFileSizeHigh << 32) | fa.nFileSizeLow;
-    return true;
-}
-
-std::wstring LowerCopy(std::wstring s)
-{
-    for (size_t i = 0; i < s.size(); i++)
-        s[i] = (wchar_t)towlower(s[i]);
-    return s;
-}
-
-typedef std::map<std::wstring, std::vector<std::wstring> > StoreMap;
-
-bool ScanWinSxS(StoreMap& found, const std::vector<std::wstring>& names)
-{
-    std::wstring sxdir = WinDir() + L"\\WinSxS";
-    std::wstring pattern = sxdir + L"\\*";
-    WIN32_FIND_DATAW fd;
-    HANDLE fh = FindFirstFileW(pattern.c_str(), &fd);
-    if (fh == INVALID_HANDLE_VALUE)
-        return false;
-
-    do
-    {
-        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
-            continue;
-        if (wcscmp(fd.cFileName, L".") == 0 || wcscmp(fd.cFileName, L"..") == 0)
-            continue;
-        std::wstring dir = sxdir + L"\\" + fd.cFileName;
-        for (size_t i = 0; i < names.size(); i++)
-        {
-            std::wstring cand = dir + L"\\" + names[i];
-            DWORD a = GetFileAttributesW(cand.c_str());
-            if (a != INVALID_FILE_ATTRIBUTES && !(a & FILE_ATTRIBUTE_DIRECTORY))
-                found[LowerCopy(names[i])].push_back(cand);
-        }
-    } while (FindNextFileW(fh, &fd));
-    FindClose(fh);
     return true;
 }
 
@@ -166,8 +163,8 @@ bool ReplaceSystemFile(const std::wstring& target, const std::wstring& source,
     DeleteFileW(oldName.c_str());
     if (!MoveFileExW(target.c_str(), oldName.c_str(), MOVEFILE_REPLACE_EXISTING))
     {
-        *inUse = GetLastError() == ERROR_ACCESS_DENIED ||
-                 GetLastError() == ERROR_SHARING_VIOLATION;
+        DWORD e = GetLastError();
+        *inUse = e == ERROR_ACCESS_DENIED || e == ERROR_SHARING_VIOLATION;
         return false;
     }
     if (!CopyFileW(source.c_str(), target.c_str(), FALSE))
@@ -179,17 +176,6 @@ bool ReplaceSystemFile(const std::wstring& target, const std::wstring& source,
     return true;
 }
 
-} 
-
-std::vector<std::wstring> FindInWinSxS(const std::wstring& filename)
-{
-    StoreMap m;
-    std::vector<std::wstring> one;
-    one.push_back(filename);
-    ScanWinSxS(m, one);
-    std::vector<std::wstring> empty;
-    StoreMap::const_iterator it = m.find(LowerCopy(filename));
-    return it == m.end() ? empty : it->second;
 }
 
 void CmdFileRestore()

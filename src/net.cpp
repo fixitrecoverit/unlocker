@@ -20,24 +20,6 @@ unsigned short Port(DWORD p)
     return (unsigned short)((p >> 8) | ((p & 0xffu) << 8));
 }
 
-std::wstring Ip6(const BYTE* a)
-{
-    wchar_t b[80];
-    int o = 0;
-    for (int i = 0; i < 16; i += 2)
-    {
-        int v = (a[i] << 8) | a[i + 1];
-        if (v)
-            o += swprintf(b + o, 80 - o, L"%x", v);
-        else
-            o += swprintf(b + o, 80 - o, L"0");
-        if (i < 14)
-            b[o++] = L':';
-    }
-    b[o] = 0;
-    return b;
-}
-
 const wchar_t* TcpStateName(DWORD s)
 {
     switch (s)
@@ -58,7 +40,7 @@ const wchar_t* TcpStateName(DWORD s)
     }
 }
 
-} 
+}
 
 void CmdNet()
 {
@@ -91,15 +73,15 @@ void CmdNet()
         const wchar_t* color = r.dwState == MIB_TCP_STATE_ESTAB ? col::Yel
                                : r.dwState == MIB_TCP_STATE_LISTEN ? L""
                                                                    : col::Dim;
-        Out(L"%stcp4    %-10s %-21s %-21s %s%lu %s%s\n", color,
+        Out(L"%stcp4    %-10s %-21s %-21s %lu%s%s%s\n", color,
             TcpStateName(r.dwState),
             (Ip4(r.dwLocalAddr) + L":" + std::to_wstring(Port(r.dwLocalPort)))
                 .c_str(),
             (Ip4(r.dwRemoteAddr) + L":" +
              std::to_wstring(Port(r.dwRemotePort)))
                 .c_str(),
-            proc.empty() ? L"" : L"", (unsigned long)r.dwOwningPid,
-            proc.c_str(), col::R);
+            (unsigned long)r.dwOwningPid,
+            proc.empty() ? L"" : L" ", proc.c_str(), col::R);
     }
 
     sz = 0;

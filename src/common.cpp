@@ -1,6 +1,6 @@
 #include "common.h"
 
-const wchar_t* kVersion = L"0.1";
+const wchar_t* kVersion = L"0.1.1";
 
 static bool g_vt = false;
 bool g_colorsOff = false;
@@ -151,10 +151,7 @@ void InitConsole()
         col::ShowCur = L"\x1b[?25h";
     }
 
-    wchar_t title[128];
-    swprintf(title, 128, L"firiu unlocker v%s (%s)",
-             kVersion, sizeof(void*) == 8 ? L"x64" : L"x86");
-    SetConsoleTitleW(title);
+    SetConsoleTitleW(L"firi unlocker v0.1.1");
 
     HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
     if (hIn && hIn != INVALID_HANDLE_VALUE && GetConsoleMode(hIn, &mode))
@@ -363,6 +360,23 @@ bool IsAllDigits(const std::wstring& s)
         if (s[i] < L'0' || s[i] > L'9')
             return false;
     return true;
+}
+
+void SplitLines(const std::wstring& text, std::vector<std::wstring>& lines)
+{
+    lines.clear();
+    size_t s = 0;
+    while (s < text.size())
+    {
+        size_t e = text.find(L'\n', s);
+        if (e == std::wstring::npos)
+            e = text.size();
+        std::wstring line = text.substr(s, e - s);
+        while (!line.empty() && line.back() == L'\r')
+            line.pop_back();
+        lines.push_back(line);
+        s = e + 1;
+    }
 }
 
 static void CookedStdin(bool on, DWORD* saved)

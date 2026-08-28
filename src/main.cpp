@@ -14,6 +14,7 @@
 #include "efi.h"
 #include "triage.h"
 #include "clip.h"
+#include "watchdog.h"
 #include "cfg.h"
 #include "ui.h"
 
@@ -103,11 +104,13 @@ static void QuickFixesMenu()
         { '1', L"restore fonts" },
         { '2', L"force enable uac" },
         { '3', L"register firiu (win+r + cmd)" },
+        { '4', L"reset hosts file" },
+        { '5', L"disable internet proxy" },
         { '0', L"back" },
     };
     for (;;)
     {
-        int pick = RunMenu(L"quick fixes", items, 4);
+        int pick = RunMenu(L"quick fixes", items, 6);
         if (pick < 0 || items[pick].key == '0')
             break;
         ClrScr();
@@ -121,6 +124,12 @@ static void QuickFixesMenu()
             break;
         case '3':
             CmdInstallFiriu();
+            break;
+        case '4':
+            CmdFixHosts();
+            break;
+        case '5':
+            CmdFixProxy();
             break;
         }
         PauseEnter();
@@ -314,6 +323,8 @@ static void Help()
         L"  svc-disable|svc-delete <name>\n"
         L"  restore-files     system file check vs winsxs\n"
         L"  fix-fonts         font repair\n"
+        L"  fix-hosts         reset hosts file to defaults\n"
+        L"  fix-proxy         disable wininet proxy / autoconfig url\n"
         L"  force-uac         re-enable uac\n"
         L"  install-firiu     win+r/cmd integration\n"
         L"  unrestrict [clean] ifeo debuggers + policy restrictions\n"
@@ -403,6 +414,10 @@ int main()
             CmdFileRestore();
         else if (cmd == L"fix-fonts")
             QuickFixFonts(true);
+        else if (cmd == L"fix-hosts")
+            CmdFixHosts();
+        else if (cmd == L"fix-proxy")
+            CmdFixProxy();
         else if (cmd == L"force-uac")
             CmdForceUac();
         else if (cmd == L"install-firiu")

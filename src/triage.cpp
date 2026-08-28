@@ -86,18 +86,7 @@ void CaptureScanLines(std::vector<std::wstring>& lines)
     for (size_t i = 0; i < chunks.size(); i++)
         all += chunks[i];
 
-    size_t s = 0;
-    while (s < all.size())
-    {
-        size_t e = all.find(L'\n', s);
-        if (e == std::wstring::npos)
-            e = all.size();
-        std::wstring line = all.substr(s, e - s);
-        while (!line.empty() && line.back() == L'\r')
-            line.pop_back();
-        lines.push_back(line);
-        s = e + 1;
-    }
+    SplitLines(all, lines);
 }
 
 std::wstring StripAnsi(const std::wstring& in)
@@ -151,7 +140,7 @@ bool IsFinding(const std::wstring& raw)
            t.find(L" -> ") != std::wstring::npos;
 }
 
-} 
+}
 
 static DWORD MatchTriageKey(const KEY_EVENT_RECORD& ke)
 {

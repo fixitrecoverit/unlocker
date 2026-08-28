@@ -1,6 +1,6 @@
 #include "common.h"
 
-const wchar_t* kVersion = L"0.2.0";
+const wchar_t* kVersion = L"0.2.1";
 
 static bool g_vt = false;
 bool g_colorsOff = false;
@@ -154,7 +154,7 @@ void InitConsole()
         col::Link = L"\x1b[4;96m";
     }
 
-    SetConsoleTitleW(L"FIRI Unlocker v0.2.0");
+    SetConsoleTitleW(L"FIRI Unlocker v0.2.1");
 
     HANDLE hIn = GetStdHandle(STD_INPUT_HANDLE);
     if (hIn && hIn != INVALID_HANDLE_VALUE && GetConsoleMode(hIn, &mode))

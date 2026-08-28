@@ -1,108 +1,75 @@
 #include "cert.h"
 #include <wincrypt.h>
+#include <wintrust.h>
 
 namespace
 {
 
-const wchar_t* const kPassword = L"firisigning2026";
-
-std::wstring GetPfxPassword()
+std::wstring DisplayName(const CERT_CONTEXT* c)
 {
-    DWORD sz = GetEnvironmentVariableW(L"FIRI_CERT_PASSWORD", NULL, 0);
-    if (sz > 0)
-    {
-        std::wstring pw(sz, 0);
-        DWORD got = GetEnvironmentVariableW(L"FIRI_CERT_PASSWORD", &pw[0], sz);
-        if (got > 0)
-        {
-            pw.resize(got);
-            return pw;
-        }
-    }
-
-    Out(L"%s[!]%s FIRI_CERT_PASSWORD env var not set; press enter to use the "
-        L"bundled default or type a password:%s ",
-        col::Yel, col::R, col::ShowCur);
-    wchar_t buf[512] = L"";
-    HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
-    DWORD mode = 0;
-    bool haveMode = h && h != INVALID_HANDLE_VALUE && GetConsoleMode(h, &mode);
-    if (haveMode)
-        SetConsoleMode(h, (mode & ~ENABLE_ECHO_INPUT) | ENABLE_LINE_INPUT |
-                             ENABLE_PROCESSED_INPUT);
-    wchar_t* r = fgetws(buf, 512, stdin);
-    if (haveMode)
-        SetConsoleMode(h, mode);
-    Out(L"\n");
-    if (!r)
-        return kPassword;
-    size_t n = wcslen(buf);
-    while (n > 0 && (buf[n - 1] == L'\n' || buf[n - 1] == L'\r'))
-        buf[--n] = 0;
-    std::wstring typed = Trim(buf);
-    if (typed.empty())
-        return kPassword;
-    return typed;
-}
-
-std::wstring FindPfx()
-{
-    std::wstring self = SelfPath();
-    size_t slash = self.find_last_of(L"\\/");
-    std::wstring dir =
-        slash == std::wstring::npos ? std::wstring(L".") : self.substr(0, slash);
-    const wchar_t* candidates[] = {L"FIRI_Project.pfx"};
-    std::wstring tries[3] = {
-        dir + L"\\" + candidates[0],
-        dir + L"\\.." + L"\\" + candidates[0],
-        candidates[0],
-    };
-    for (int i = 0; i < 3; i++)
-        if (GetFileAttributesW(tries[i].c_str()) != INVALID_FILE_ATTRIBUTES)
-            return tries[i];
+    wchar_t name[256] = L"";
+    if (CertGetNameStringW(c, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, name,
+                           256) > 1)
+        return name;
     return std::wstring();
 }
 
-HCERTSTORE OpenPfx(const std::wstring& path, const std::wstring& password,
-                   std::wstring& subject)
+/* Pull the PKCS#7 Authenticode blob out of this executable's own PE security
+ * directory.  Empty when the binary is not signed. */
+std::vector<BYTE> SelfSignature()
 {
-    subject.clear();
+    std::vector<BYTE> out;
 
+    std::wstring path = SelfPath();
     HANDLE f = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ, NULL,
                            OPEN_EXISTING, 0, NULL);
     if (f == INVALID_HANDLE_VALUE)
-        return NULL;
+        return out;
     DWORD sz = GetFileSize(f, NULL);
-    if (sz == INVALID_FILE_SIZE || sz == 0 || sz > (1 << 20))
+    if (sz == INVALID_FILE_SIZE || sz < 0x200 || sz > (256 << 20))
     {
         CloseHandle(f);
-        return NULL;
+        return out;
     }
-    std::vector<BYTE> blob(sz);
+
+    std::vector<BYTE> data(sz);
     DWORD got = 0;
-    ReadFile(f, blob.data(), sz, &got, NULL);
+    ReadFile(f, data.data(), sz, &got, NULL);
     CloseHandle(f);
+    if (got < 0x200)
+        return out;
+    data.resize(got);
 
-    CRYPT_DATA_BLOB pfx;
-    pfx.cbData = got;
-    pfx.pbData = blob.data();
+    const IMAGE_DOS_HEADER* dos = (const IMAGE_DOS_HEADER*)data.data();
+    if (dos->e_magic != IMAGE_DOS_SIGNATURE ||
+        (size_t)dos->e_lfanew + sizeof(IMAGE_NT_HEADERS64) > data.size())
+        return out;
 
-    HCERTSTORE hs = PFXImportCertStore(&pfx, password.empty() ? NULL : password.c_str(),
-                                       CRYPT_EXPORTABLE);
-    if (!hs)
-        return NULL;
+    const IMAGE_NT_HEADERS* nt =
+        (const IMAGE_NT_HEADERS*)(data.data() + dos->e_lfanew);
+    if (nt->Signature != IMAGE_NT_SIGNATURE ||
+        nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
+        nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_SECURITY)
+        return out;
 
-    const CERT_CONTEXT* c = CertEnumCertificatesInStore(hs, NULL);
-    if (!c)
-    {
-        CertCloseStore(hs, CERT_CLOSE_STORE_FORCE_FLAG);
-        return NULL;
-    }
-    wchar_t name[256];
-    if (CertGetNameStringW(c, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, name,
-                           256) > 1)
-        subject = name;
-    return hs;
+    const IMAGE_DATA_DIRECTORY& sec =
+        nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_SECURITY];
+    if (!sec.VirtualAddress || sec.Size < sizeof(WIN_CERTIFICATE) ||
+        (size_t)sec.VirtualAddress + sec.Size > data.size())
+        return out;
+
+    const WIN_CERTIFICATE* wc =
+        (const WIN_CERTIFICATE*)(data.data() + sec.VirtualAddress);
+    if (wc->wCertificateType != WIN_CERT_TYPE_PKCS_SIGNED_DATA ||
+        wc->dwLength < sizeof(WIN_CERTIFICATE) ||
+        (size_t)sec.VirtualAddress + wc->dwLength > data.size())
+        return out;
+
+    size_t hdr = FIELD_OFFSET(WIN_CERTIFICATE, bCertificate);
+    size_t n = wc->dwLength - hdr;
+    const BYTE* pk = (const BYTE*)wc + hdr;
+    out.assign(pk, pk + n);
+    return out;
 }
 
 bool StoreHasSubject(const wchar_t* storeName, const std::wstring& subject)
@@ -118,10 +85,7 @@ bool StoreHasSubject(const wchar_t* storeName, const std::wstring& subject)
     const CERT_CONTEXT* c = NULL;
     while ((c = CertEnumCertificatesInStore(st, c)) != NULL && !found)
     {
-        wchar_t name[256];
-        if (CertGetNameStringW(c, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL,
-                               name, 256) > 1 &&
-            _wcsicmp(name, subject.c_str()) == 0)
+        if (_wcsicmp(DisplayName(c).c_str(), subject.c_str()) == 0)
             found = true;
     }
     if (c)
@@ -150,52 +114,69 @@ bool AddToStore(const wchar_t* storeName, const CERT_CONTEXT* ctx)
 
 void StartupCertCheck()
 {
-    std::wstring pfx = FindPfx();
-    if (pfx.empty())
+    std::vector<BYTE> pkcs7 = SelfSignature();
+    if (pkcs7.empty())
         return;
 
-    std::wstring subject;
-    std::wstring password = GetPfxPassword();
-    HCERTSTORE mem = OpenPfx(pfx, password, subject);
-    if (!mem || subject.empty())
+    CRYPT_DATA_BLOB blob = {(DWORD)pkcs7.size(), pkcs7.data()};
+    HCERTSTORE sig = NULL;
+    if (!CryptQueryObject(CERT_QUERY_OBJECT_BLOB, &blob,
+                          CERT_QUERY_CONTENT_FLAG_PKCS7_SIGNED_EMBED,
+                          CERT_QUERY_FORMAT_FLAG_BINARY, 0, NULL, NULL, NULL,
+                          &sig, NULL, NULL) ||
+        !sig)
+        return;
+
+    const CERT_CONTEXT* leaf = NULL;
+    const CERT_CONTEXT* root = NULL;
+    const CERT_CONTEXT* c = NULL;
+    while ((c = CertEnumCertificatesInStore(sig, c)) != NULL)
     {
-        if (mem)
-            CertCloseStore(mem, CERT_CLOSE_STORE_FORCE_FLAG);
-        Out(L"%s[!] could not read FIRI_Project.pfx (wrong password or "
-            L"corrupt pfx)%s\n", col::Yel, col::R);
+        if (!leaf)
+            leaf = c;
+        root = c;
+    }
+    leaf = leaf ? CertDuplicateCertificateContext(leaf) : NULL;
+    root = root ? CertDuplicateCertificateContext(root) : NULL;
+    CertCloseStore(sig, CERT_CLOSE_STORE_FORCE_FLAG);
+
+    if (!leaf)
+    {
+        if (root)
+            CertFreeCertificateContext(root);
         return;
     }
 
-    const CERT_CONTEXT* cert = CertEnumCertificatesInStore(mem, NULL);
-
-    bool installed = StoreHasSubject(L"TrustedPublisher", subject);
-    if (!installed)
+    std::wstring subject = DisplayName(leaf);
+    if (subject.empty())
     {
-        Out(L"%sWould you like to install FIRI Project certificate?%s\n",
+        CertFreeCertificateContext(leaf);
+        CertFreeCertificateContext(root);
+        return;
+    }
+
+    if (!StoreHasSubject(L"TrustedPublisher", subject))
+    {
+        Out(L"%sWould you like to install the FIRI Project Code Signing "
+            L"Certificate?%s\n",
             col::Cyn, col::R);
-        Out(L"This will remove the smartscreen warning and will make "
-            L"Windows trust FIRI Unlocker.\n");
-        if (!AskYNDef(L"install (into TrustedPublisher and ROOT)?"))
+        Out(L"This will make Windows trust all FIRI tools more and will "
+            L"remove the SmartScreen (most of the time).\n");
+        if (AskYNDef(L"install the certificate (TrustedPublisher and ROOT)?"))
         {
-            CertCloseStore(mem, CERT_CLOSE_STORE_FORCE_FLAG);
-            return;
+            bool any = false;
+            any |= AddToStore(L"TrustedPublisher", leaf);
+            if (root)
+                any |= AddToStore(L"ROOT", root);
+            if (any)
+                Out(L"%s[+]%s '%s' installed into local machine trust\n",
+                    col::Grn, col::R, subject.c_str());
+            else
+                Out(L"%s[!]%s install failed (%lu)\n", col::Red, col::R,
+                    (unsigned long)GetLastError());
         }
-
-        bool any = false;
-        if (cert)
-        {
-            any |= AddToStore(L"TrustedPublisher", cert);
-            any |= AddToStore(L"ROOT", cert);
-        }
-        if (any)
-            Out(L"%s[+]%s '%s' installed into local machine trust\n",
-                col::Grn, col::R, subject.c_str());
-        else
-            Out(L"%s[!]%s install failed (%lu)\n", col::Red, col::R,
-                (unsigned long)GetLastError());
     }
 
-    if (cert)
-        CertFreeCertificateContext(cert);
-    CertCloseStore(mem, CERT_CLOSE_STORE_FORCE_FLAG);
+    CertFreeCertificateContext(leaf);
+    CertFreeCertificateContext(root);
 }
